@@ -1,11 +1,24 @@
+use std::sync::mpsc::channel;
+use std::sync::Mutex;
+use std::sync::Arc;
 pub struct ThreadPool {
     handles: Vec<std::thread::JoinHandle<()>>,
 }
 impl ThreadPool {
     pub fn new(threads_count: u8) -> Self {
-        let handles=(0..threads_count).map(|_|{
-            std::thread::spawn(||{})
-        }).collect();
+        let (sender,receiver)=channel::<Box<dyn Fn()+Send>>();
+        let receiver=Arc::new(Mutex::new(receiver));
+        let mut handles=vec![];
+            for _ in 0..threads_count{
+            let clone=receiver.clone();
+            let handle=std::thread::spawn(move||{
+                loop{
+                    let work= clone.lock().unwrap().recv().unwrap();
+                    work();
+                }
+            });
+            handles.push(handle);
+        }
         Self { handles }
     }
     pub fn execute<T: Fn()>(&self, work: T) {}
